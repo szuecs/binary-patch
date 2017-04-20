@@ -1,11 +1,55 @@
-BIANRY=binary-patch
-SED ?= sed
+BINARY		?= binary-patch
+VERSION		?= $(shell git describe --tags --always --dirty)
+IMAGE		?= pierone.stups.zalan.do/teapot/$(BINARY)
+TAG		?= $(VERSION)
+DOCKERFILE	?= Dockerfile
+BUILD_FLAGS	?= -v
+LDFLAGS		?= -X main.Version=$(VERSION) -X main.Buildstamp=$(shell date -u '+%Y-%m-%d_%I:%M:%S%p') -X main.Githash=$(shell git rev-parse HEAD)
+GITHEAD		= $(shell git rev-parse --short HEAD)
+GITURL		= $(shell git config --get remote.origin.url)
+GITSTATUS	= $(shell git status --porcelain || echo "no changes")
+SOURCES		= $(shell find . -name '*.go')
+GOPKGS		= $(shell go list ./... | grep -v /vendor/)
+
+default: build.local build.server
+
+clean:
+	rm -rf build
+
+test:
+	go test -v $(GOPKGS)
+
+test.raceconditions:
+	go test -race $(GOPKGS)
+
+fmt:
+	go fmt $(GOPKGS)
+
+check:
+	golint $(GOPKGS)
+	go vet -v $(GOPKGS)
 
 build.server:
-	go build ./cmd/binary-patch-server
+	go build -o build/binary-patch-server ./cmd/binary-patch-server
 
-build.client:
-	$(SED) -i 's/v0.0.2/v0.0.1/g' ./cmd/binary-patch/main.go
-	go build -o binary-patch.v1 ./cmd/binary-patch
-	$(SED) -i 's/v0.0.1/v0.0.2/g' ./cmd/binary-patch/main.go
-	go build ./cmd/binary-patch
+build.local: build/$(BINARY)
+build.linux: build/linux/$(BINARY)
+build.osx: build/osx/$(BINARY)
+
+build/$(BINARY): $(SOURCES)
+	CGO_ENABLED=0 go build -o build/$(BINARY) $(BUILD_FLAGS) -ldflags "$(LDFLAGS)" ./cmd/binary-patch
+
+build/linux/$(BINARY): $(SOURCES)
+	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build $(BUILD_FLAGS) -o build/linux/$(BINARY) -ldflags "$(LDFLAGS)" ./cmd/binary-patch
+
+build/osx/$(BINARY): $(SOURCES)
+	GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build $(BUILD_FLAGS) -o build/osx/$(BINARY) -ldflags "$(LDFLAGS)" ./cmd/binary-patch
+
+build.docker: scm-source.json build.linux #zalando compliant image
+	docker build --rm -t "$(IMAGE):$(TAG)" -f $(DOCKERFILE) .
+
+build.push: build.docker
+	docker push "$(IMAGE):$(TAG)"
+
+scm-source.json: .git
+	@echo '{"url": "$(GITURL)", "revision": "$(GITHEAD)", "author": "$(USER)", "status": "$(GITSTATUS)"}' > scm-source.json

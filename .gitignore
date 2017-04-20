@@ -1,4 +1,5 @@
 vendor
+build
 scm-source.json
 Dockerfile.upstream
 *.aci

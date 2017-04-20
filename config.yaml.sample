@@ -1,0 +1,8 @@
+---
+debug_enabled: false
+oauth2_enabled: false
+tls_certfile_path: /path/to/your/certfile
+tls_keyfile_path: /path/to/your/keyfile
+log_flush_interval: 5s
+port: 8080
+monitor_port: 9000
