@@ -86,7 +86,6 @@ func (u *Update) versionFromFilename(filepath string) string {
 }
 
 func (u *Update) SetLatestVersion() {
-	//u.Version
 	globStr := strings.Replace(u.String(), u.Version, "*", 1)
 	glog.V(2).Infof("Use globStr: %s", globStr)
 	files, err := filepath.Glob(fmt.Sprintf("%s/%s", basedir, globStr))
