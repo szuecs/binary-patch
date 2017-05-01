@@ -12,8 +12,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang/glog"
+	"github.com/kr/binarydist"
 	"github.com/pkg/errors"
-	"github.com/szuecs/binary-patch/internal/binarydist" // copied from github.com/inconshreveable/go-update/internal/binarydist
 )
 
 var (
