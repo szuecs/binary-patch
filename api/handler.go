@@ -138,6 +138,16 @@ func (svc *Service) UpdateHandler(ginCtx *gin.Context) {
 	glog.Infof("Copied %d bytes to client to update %s", n, update)
 }
 
+// PatchUpdateHandler handles /patch-update/:name endpoint
+func (svc *Service) PatchUpdateHandler(ginCtx *gin.Context) {
+	ginCtx.AbortWithError(http.StatusInternalServerError, fmt.Errorf("not implemented"))
+}
+
+// SignedUpdateHandler handles /signed-update/:name endpoint
+func (svc *Service) SignedUpdateHandler(ginCtx *gin.Context) {
+	ginCtx.AbortWithError(http.StatusInternalServerError, fmt.Errorf("not implemented"))
+}
+
 // RootHandler handles / endpoint
 func (svc *Service) RootHandler(ginCtx *gin.Context) {
 	ginCtx.JSON(http.StatusOK, gin.H{"title": "root"})

@@ -111,10 +111,14 @@ func (svc *Service) Run(config *ServiceConfig) error {
 		// authenticated and authorized routes
 		private.GET("/", svc.RootHandler)
 		private.GET("/update/:name", svc.UpdateHandler)
+		private.GET("/patch-update/:name", svc.PatchUpdateHandler)
+		private.GET("/signed-update/:name", svc.SignedUpdateHandler)
 	} else {
 		// public routes
 		router.GET("/", svc.RootHandler)
 		router.GET("/update/:name", svc.UpdateHandler)
+		router.GET("/patch-update/:name", svc.PatchUpdateHandler)
+		router.GET("/signed-update/:name", svc.SignedUpdateHandler)
 	}
 
 	// TLS config
