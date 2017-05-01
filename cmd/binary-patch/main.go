@@ -64,7 +64,6 @@ func main() {
 
 	case "patch-update":
 		log.Printf("use %s", *basePatchUpdateURL)
-		log.Fatal("TODO")
 
 		rc, err := GetUpdate(*basePatchUpdateURL, Version)
 		if err != nil {
