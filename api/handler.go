@@ -24,7 +24,8 @@ var (
 	errUnsupportedArchOS   = errors.New("Wrong architecture and OS combination")
 	errBinaryNotFound      = errors.New("Binary not found: ")
 	supported              = map[ArchAndOS]bool{
-		ArchAndOS{Arch: "amd64", OS: "linux"}: true,
+		ArchAndOS{Arch: "amd64", OS: "linux"}:  true,
+		ArchAndOS{Arch: "amd64", OS: "darwin"}: true,
 	}
 )
 
