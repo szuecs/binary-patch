@@ -1,10 +1,14 @@
 package main
 
 import (
+	"bufio"
+	"bytes"
 	"crypto"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
@@ -26,6 +30,19 @@ var (
 	Version string = "Not set"
 )
 
+var publicKey = []byte(`
+-----BEGIN PUBLIC KEY-----
+MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEr+Ln7jAKxYskk9fNXNXAJrcEB0Am
+jf+4GRM//Kl6mhHAYq/j6cdWALJS8vJyb4OpvlCzAoiJOH70zss3h0L62w==
+-----END PUBLIC KEY-----
+`)
+
+type SignedUpdate struct {
+	Patch     []byte `json:"patch"`
+	Signature []byte `json:"signature"`
+	Digest    []byte `json:"sha256"`
+}
+
 func main() {
 	var (
 		debug         = kingpin.Flag("debug", "enable debug mode").Default("false").Bool()
@@ -34,9 +51,11 @@ func main() {
 		baseUpdateURL = update.Flag("url", "Update URL").Default("http://localhost:8080/update").String()
 		patchUpdate   = kingpin.Command("patch-update", "update binary diff")
 
-		basePatchUpdateURL  = patchUpdate.Flag("url", "Update URL").Default("http://localhost:8080/patch-update").String()
-		signedUpdate        = kingpin.Command("signed-update", "Verify signature and update binary")
-		baseSignedUpdateURL = signedUpdate.Flag("url", "Update URL").Default("http://localhost:8080/signed-update").String()
+		basePatchUpdateURL       = patchUpdate.Flag("url", "Update URL").Default("http://localhost:8080/patch-update").String()
+		signedUpdate             = kingpin.Command("signed-update", "Verify signature and update binary")
+		baseSignedUpdateURL      = signedUpdate.Flag("url", "Update URL").Default("http://localhost:8080/signed-update").String()
+		signedPatchUpdate        = kingpin.Command("signed-patch-update", "Verify signature and update binary diff")
+		baseSignedPatchUpdateURL = signedPatchUpdate.Flag("url", "Update URL").Default("http://localhost:8080/signed-patch-update").String()
 	)
 
 	cmd := kingpin.Parse()
@@ -52,7 +71,7 @@ func main() {
     GitHash: %s
 `, path.Base(os.Args[0]), Version, Buildstamp, Githash)
 		os.Exit(0)
-	case "update":
+	case update.FullCommand():
 		rc, err := GetUpdate(*baseUpdateURL, Version)
 		if err != nil {
 			log.Fatalf("Failed to get update: %v", err)
@@ -62,7 +81,7 @@ func main() {
 		}
 		rc.Close()
 
-	case "patch-update":
+	case patchUpdate.FullCommand():
 		log.Printf("use %s", *basePatchUpdateURL)
 
 		rc, err := GetUpdate(*basePatchUpdateURL, Version)
@@ -74,11 +93,65 @@ func main() {
 		}
 		rc.Close()
 
-	case "signed-update":
+	case signedUpdate.FullCommand():
 		log.Printf("use %s", *baseSignedUpdateURL)
-		log.Fatal("TODO")
-	}
+		rc, err := GetUpdate(*baseSignedUpdateURL, Version)
+		if err != nil {
+			log.Fatalf("Failed to get update: %v", err)
+		}
 
+		jsonUpdateData, err := ioutil.ReadAll(rc)
+		if err != nil {
+			log.Fatalf("Failed to read json: %v", err)
+		}
+		rc.Close()
+
+		var data SignedUpdate
+		err = json.Unmarshal(jsonUpdateData, &data)
+		if err != nil {
+			log.Fatalf("Failed to unmarshal json: %v", err)
+		}
+
+		buf := bytes.NewBuffer(data.Patch)
+		r := bufio.NewReader(buf)
+		rcPatch := ioutil.NopCloser(r)
+		sDigest := strings.TrimSpace(string(data.Digest))
+		sSign := hex.EncodeToString(data.Signature)
+		err = ApplyVerifiedUpdate(rcPatch, sDigest, sSign)
+		if err != nil {
+			log.Fatalf("Failed verified update: %v", err)
+		}
+
+	case signedPatchUpdate.FullCommand():
+		log.Printf("use %s", *baseSignedPatchUpdateURL)
+		rc, err := GetUpdate(*baseSignedPatchUpdateURL, Version)
+		if err != nil {
+			log.Fatalf("Failed to get update: %v", err)
+		}
+
+		jsonUpdateData, err := ioutil.ReadAll(rc)
+		if err != nil {
+			log.Fatalf("Failed to read json: %v", err)
+		}
+		rc.Close()
+
+		var data SignedUpdate
+		err = json.Unmarshal(jsonUpdateData, &data)
+		if err != nil {
+			log.Fatalf("Failed to unmarshal json: %v", err)
+		}
+
+		buf := bytes.NewBuffer(data.Patch)
+		r := bufio.NewReader(buf)
+		rcPatch := ioutil.NopCloser(r)
+
+		digest := strings.TrimSpace(string(data.Digest))
+		sSign := hex.EncodeToString(data.Signature)
+		err = ApplyVerifiedPatchUpdate(rcPatch, digest, sSign)
+		if err != nil {
+			log.Fatalf("Failed verified update: %v", err)
+		}
+	}
 }
 
 // GetUpdate returns an open io.ReadCloser, if error is not
@@ -127,6 +200,71 @@ func ApplyUpdateWithPatch(patch io.Reader) error {
 	return nil
 }
 
+// ApplyVerifiedUpdate applies a signed binary update and checks the checksum.
+func ApplyVerifiedUpdate(binary io.ReadCloser, hexChecksum, hexSignature string) error {
+	defer binary.Close()
+	checksum, err := hex.DecodeString(hexChecksum)
+	if err != nil {
+		return fmt.Errorf("failed checksum: %v", err)
+	}
+	signature, err := hex.DecodeString(hexSignature)
+	if err != nil {
+		return fmt.Errorf("failed signature: %v", err)
+	}
+	opts := update.Options{
+		Checksum:  checksum,
+		Signature: signature,
+		Hash:      crypto.SHA256,
+		Verifier:  update.NewECDSAVerifier(),
+	}
+	err = opts.SetPublicKeyPEM(publicKey)
+	if err != nil {
+		return fmt.Errorf("failed set opts: %v", err)
+	}
+	err = update.Apply(binary, opts)
+	if err != nil {
+		if rerr := update.RollbackError(err); rerr != nil {
+			return fmt.Errorf("failed to rollback from bad signed update: %v", rerr)
+		}
+		log.Println("Rolled back signed patch Update")
+		return fmt.Errorf("successfully rolled back signed update with options %v: %v", opts, err)
+	}
+	return nil
+}
+
+// ApplyVerifiedPatchUpdate applies a signed binary patch and checks the checksum.
+func ApplyVerifiedPatchUpdate(binary io.ReadCloser, hexChecksum, hexSignature string) error {
+	defer binary.Close()
+	checksum, err := hex.DecodeString(hexChecksum)
+	if err != nil {
+		return fmt.Errorf("failed to decode checksum: %v", err)
+	}
+	signature, err := hex.DecodeString(hexSignature)
+	if err != nil {
+		return fmt.Errorf("failed to decode signature: %v", err)
+	}
+	opts := update.Options{
+		Patcher:   update.NewBSDiffPatcher(),
+		Checksum:  checksum,
+		Signature: signature,
+		Hash:      crypto.SHA256,
+		Verifier:  update.NewECDSAVerifier(),
+	}
+	err = opts.SetPublicKeyPEM(publicKey)
+	if err != nil {
+		return fmt.Errorf("failed set opts: %v", err)
+	}
+	err = update.Apply(binary, opts)
+	if err != nil {
+		if rerr := update.RollbackError(err); rerr != nil {
+			return fmt.Errorf("failed to rollback from bad signed patch update: %v", rerr)
+		}
+		log.Println("Rolled back signed patch Update")
+		return fmt.Errorf("successfully rolled back signed patch update with options %v: %v", opts, err)
+	}
+	return nil
+}
+
 func getLocalBinaryName() string {
 	binSlice := strings.Split(os.Args[0], "/")
 	return binSlice[len(binSlice)-1]
@@ -157,55 +295,4 @@ func getUpdate(url string) (io.ReadCloser, error) {
 		return nil, fmt.Errorf("you already have the latest version")
 	}
 	return resp.Body, nil
-}
-
-// TODO
-
-func updateWithChecksum(binary io.Reader, hexChecksum string) error {
-	checksum, err := hex.DecodeString(hexChecksum)
-	if err != nil {
-		return err
-	}
-	err = update.Apply(binary, update.Options{
-		Hash:     crypto.SHA256,
-		Checksum: checksum,
-	})
-	if err != nil {
-		// error handling
-	}
-	return err
-}
-
-var publicKey = []byte(`
------BEGIN PUBLIC KEY-----
-MFYwEAYHKoZIzj0CAQYFK4EEAAoDQgAEtrVmBxQvheRArXjg2vG1xIprWGuCyESx
-MMY8pjmjepSy2kuz+nl9aFLqmr+rDNdYvEBqQaZrYMc6k29gjvoQnQ==
------END PUBLIC KEY-----
-`)
-
-func verifiedUpdate(binary io.ReadCloser, hexChecksum, hexSignature string) error {
-	defer binary.Close()
-	checksum, err := hex.DecodeString(hexChecksum)
-	if err != nil {
-		return err
-	}
-	signature, err := hex.DecodeString(hexSignature)
-	if err != nil {
-		return err
-	}
-	opts := update.Options{
-		Checksum:  checksum,
-		Signature: signature,
-		Hash:      crypto.SHA256,             // this is the default, you don't need to specify it
-		Verifier:  update.NewECDSAVerifier(), // this is the default, you don't need to specify it
-	}
-	err = opts.SetPublicKeyPEM(publicKey)
-	if err != nil {
-		return err
-	}
-	err = update.Apply(binary, opts)
-	if err != nil {
-		fmt.Errorf("failed to apply update with options %v: %v", opts, err)
-	}
-	return nil
 }

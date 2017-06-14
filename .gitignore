@@ -1,3 +1,5 @@
+testdata/privateKey
+testdata/publicKey
 vendor
 build
 scm-source.json

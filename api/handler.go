@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -79,12 +80,11 @@ func (u *Update) isSupported() bool {
 	return ok
 }
 
-func (u *Update) getFilepath() string {
+func (u *Update) GetFilepath() string {
 	return basedir + "/" + u.Name + "_" + u.Version + "_" + u.System.Arch + u.System.OS
 }
 
-func (u *Update) GetReader() (io.ReadCloser, error) {
-	filepath := u.getFilepath()
+func (u *Update) GetReader(filepath string) (io.ReadCloser, error) {
 	fd, err := os.Open(filepath)
 	if err != nil {
 		return nil, errors.Wrap(errBinaryNotFound, filepath)
@@ -143,7 +143,8 @@ func (svc *Service) UpdateHandler(ginCtx *gin.Context) {
 		ginCtx.String(http.StatusNotModified, "")
 		return
 	}
-	rc, err := update.GetReader()
+	fpath := update.GetFilepath()
+	rc, err := update.GetReader(fpath)
 	if err != nil {
 		ginCtx.AbortWithError(http.StatusInternalServerError, err) // TODO: AbortWithError creates StackTraces, we want to have 4xx and an error log
 	}
@@ -156,6 +157,7 @@ func (svc *Service) UpdateHandler(ginCtx *gin.Context) {
 }
 
 // PatchUpdateHandler handles /patch-update/:name endpoint
+// TODO: use file cache to read and store binarydiff
 func (svc *Service) PatchUpdateHandler(ginCtx *gin.Context) {
 	newUpdate := newUpdateFromCtx(ginCtx)
 	latestVersion := newUpdate.GetLatestVersion()
@@ -167,14 +169,16 @@ func (svc *Service) PatchUpdateHandler(ginCtx *gin.Context) {
 	oldUpdate := newUpdate.Clone()
 
 	newUpdate.Version = latestVersion
-	rcNew, err := newUpdate.GetReader()
+	fpath := newUpdate.GetFilepath()
+	rcNew, err := newUpdate.GetReader(fpath)
 	if err != nil {
 		ginCtx.AbortWithError(http.StatusInternalServerError, err) // TODO: AbortWithError creates StackTraces, we want to have 4xx and an error log
 	}
 	defer rcNew.Close()
 
 	glog.Infof("old: %v, new: %v", oldUpdate, newUpdate)
-	rcOld, err := oldUpdate.GetReader()
+	fpath = oldUpdate.GetFilepath()
+	rcOld, err := oldUpdate.GetReader(fpath)
 	if err != nil {
 		ginCtx.AbortWithError(http.StatusInternalServerError, err) // TODO: AbortWithError creates StackTraces, we want to have 4xx and an error log
 	}
@@ -188,18 +192,107 @@ func (svc *Service) PatchUpdateHandler(ginCtx *gin.Context) {
 		ginCtx.AbortWithError(http.StatusInternalServerError, fmt.Errorf("failed to create a binary patch for %s: %v", newUpdate.Name, err))
 	}
 	rw.Flush()
+
 	n, err := io.Copy(ginCtx.Writer, rw)
 	if err != nil {
 		ginCtx.AbortWithError(http.StatusInternalServerError, fmt.Errorf("failed to copy %s to client: %v", newUpdate.Name, err))
 	}
-
 	glog.Infof("Copied %d bytes to client to patch %s", n, newUpdate)
 
 }
 
 // SignedUpdateHandler handles /signed-update/:name endpoint
 func (svc *Service) SignedUpdateHandler(ginCtx *gin.Context) {
-	ginCtx.AbortWithError(http.StatusInternalServerError, fmt.Errorf("not implemented"))
+	newUpdate := newUpdateFromCtx(ginCtx)
+	latestVersion := newUpdate.GetLatestVersion()
+	glog.V(2).Infof("client has version %s, we have latest version %s", newUpdate.Version, latestVersion)
+	if newUpdate.Version == latestVersion {
+		ginCtx.String(http.StatusNotModified, "")
+		return
+	}
+
+	newUpdate.Version = latestVersion
+	fpath := newUpdate.GetFilepath()
+
+	binPatch, err := ioutil.ReadFile(fpath)
+	if err != nil {
+		ginCtx.AbortWithError(http.StatusInternalServerError, err) // TODO: AbortWithError creates StackTraces, we want to have 4xx and an error log
+	}
+	signature, err := ioutil.ReadFile(fpath + ".signature")
+	if err != nil {
+		ginCtx.AbortWithError(http.StatusInternalServerError, err) // TODO: AbortWithError creates StackTraces, we want to have 4xx and an error log
+	}
+	digest, err := ioutil.ReadFile(fpath + ".sha256")
+	if err != nil {
+		ginCtx.AbortWithError(http.StatusInternalServerError, err) // TODO: AbortWithError creates StackTraces, we want to have 4xx and an error log
+	}
+
+	ginCtx.JSON(http.StatusOK, gin.H{
+		"patch":     binPatch,
+		"signature": signature,
+		"sha256":    digest,
+	})
+	glog.Infof("Copied %d bytes to client to update %s", len(binPatch), newUpdate)
+}
+
+// SignedPatchUpdateHandler handles /signed-patch-update/:name endpoint
+func (svc *Service) SignedPatchUpdateHandler(ginCtx *gin.Context) {
+	newUpdate := newUpdateFromCtx(ginCtx)
+	latestVersion := newUpdate.GetLatestVersion()
+	glog.V(2).Infof("client has version %s, we have latest version %s", newUpdate.Version, latestVersion)
+	if newUpdate.Version == latestVersion {
+		ginCtx.String(http.StatusNotModified, "")
+		return
+	}
+	oldUpdate := newUpdate.Clone()
+
+	newUpdate.Version = latestVersion
+	fpath := newUpdate.GetFilepath()
+	rcNew, err := newUpdate.GetReader(fpath)
+	if err != nil {
+		ginCtx.AbortWithError(http.StatusInternalServerError, err) // TODO: AbortWithError creates StackTraces, we want to have 4xx and an error log
+	}
+	defer rcNew.Close()
+
+	glog.Infof("old: %v, new: %v", oldUpdate, newUpdate)
+	oldFpath := oldUpdate.GetFilepath()
+	rcOld, err := oldUpdate.GetReader(oldFpath)
+	if err != nil {
+		ginCtx.AbortWithError(http.StatusInternalServerError, err) // TODO: AbortWithError creates StackTraces, we want to have 4xx and an error log
+	}
+	defer rcOld.Close()
+
+	buf := bytes.NewBuffer(nil)
+	rw := bufio.NewReadWriter(bufio.NewReader(buf), bufio.NewWriter(buf))
+
+	err = binarydist.Diff(rcOld, rcNew, rw)
+	if err != nil {
+		ginCtx.AbortWithError(http.StatusInternalServerError, fmt.Errorf("failed to create a binary patch for %s: %v", newUpdate.Name, err))
+	}
+	rw.Flush()
+
+	binPatch, err := ioutil.ReadAll(rw)
+	if err != nil {
+		ginCtx.AbortWithError(http.StatusInternalServerError, err) // TODO: AbortWithError creates StackTraces, we want to have 4xx and an error log
+	}
+
+	signature, err := ioutil.ReadFile(fpath + ".signature")
+	if err != nil {
+		ginCtx.AbortWithError(http.StatusInternalServerError, err) // TODO: AbortWithError creates StackTraces, we want to have 4xx and an error log
+	}
+
+	digest, err := ioutil.ReadFile(fpath + ".sha256")
+	if err != nil {
+		ginCtx.AbortWithError(http.StatusInternalServerError, err) // TODO: AbortWithError creates StackTraces, we want to have 4xx and an error log
+	}
+
+	ginCtx.JSON(http.StatusOK, gin.H{
+		"patch":     binPatch,
+		"signature": signature,
+		"sha256":    digest,
+	})
+
+	glog.Infof("Copied %d bytes patch to client to patch %s", len(binPatch), newUpdate)
 }
 
 // RootHandler handles / endpoint
