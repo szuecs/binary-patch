@@ -29,14 +29,27 @@ based update procedure.
 
 ## Example
 
-    % go build ./cmd/binary-patch-server
-    % go build -o binary-patch.v1 ./cmd/binary-patch
-    % ./binary-patch.v1 --version
-    v0.0.1
-    % sed -i 's/v0.0.1/v0.0.2/g' ./cmd/binary-patch/main.go
-    % go build ./cmd/binary-patch
-    % ./binary-patch-server &
-    % ./binary-patch.v1
-    Update complete
-    % ./binary-patch.v1 --version
-    v0.0.2
+Create /tmp/bindata/ with 1 client application with versions v0.0.1
+and v0.0.2 and generate corresponding signature and sha256 checksum
+files:
+
+    % testdata/create_testdata.sh
+
+Build server binary:
+
+    % make build.server
+
+Run example:
+
+    % build/binary-patch version
+    binary-patch Version: v0.0.1
+    ================================
+        Buildtime: 2017-06-14_09:26:33PM
+        GitHash: 0edf55ffe02f054090d81b61b84d0b9b2242b92e
+    % build/binary-patch signed-patch-update
+    2017/06/14 23:27:55 use http://localhost:8080/signed-patch-update
+    % build/binary-patch version
+    binary-patch Version: v0.0.2
+    ================================
+        Buildtime: 2017-06-14_09:26:37PM
+        GitHash: 0edf55ffe02f054090d81b61b84d0b9b2242b92e

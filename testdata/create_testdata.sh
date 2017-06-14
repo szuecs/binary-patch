@@ -14,8 +14,15 @@ p=`pwd`
 test -f privateKey || openssl ecparam -genkey -name prime256v1 -noout -out privateKey
 test -f publicKey || openssl ec -in privateKey -pubout -out publicKey
 
+test -d /tmp/bindata || mkdir /tmp/bindata
+cd ..
+rm build/binary-patch
+VERSION=v0.0.2 make build.local
+mv build/binary-patch /tmp/bindata/binary-patch_v0.0.2_${GOARCH}${GOOS}
+VERSION=v0.0.1 make build.local
+cp -a build/binary-patch /tmp/bindata/binary-patch_v0.0.1_${GOARCH}${GOOS}
+
 cd /tmp/bindata
-#cd ../bindata
 for f in *
 do
 	if [ ${f##*.} != "sha256" ] && [ ${f##*.} != "signature" ] && [ ${f##*.} != "diff" ]
