@@ -14,7 +14,10 @@ GOPKGS		= $(shell go list ./... | grep -v /vendor/)
 default: build.local build.server
 
 clean:
-	rm -rf build
+	test -d build && rm -rf build
+	test -d bindata && rm -rf bindata
+	test -d /tmp/bindata && rm -rf /tmp/bindata
+	mkdir build bindata
 
 test:
 	go test -v $(GOPKGS)
@@ -45,11 +48,13 @@ build/linux/$(BINARY): $(SOURCES)
 build/osx/$(BINARY): $(SOURCES)
 	GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build $(BUILD_FLAGS) -o build/osx/$(BINARY) -ldflags "$(LDFLAGS)" ./cmd/binary-patch
 
-build.docker: scm-source.json build.linux #zalando compliant image
+build.docker: build.linux
 	docker build --rm -t "$(IMAGE):$(TAG)" -f $(DOCKERFILE) .
 
 build.push: build.docker
 	docker push "$(IMAGE):$(TAG)"
 
-scm-source.json: .git
-	@echo '{"url": "$(GITURL)", "revision": "$(GITHEAD)", "author": "$(USER)", "status": "$(GITSTATUS)"}' > scm-source.json
+build.test: clean build.server
+	test -d  /tmp/bindata ||  mkdir -p /tmp/bindata
+	testdata/create_testdata.sh
+
