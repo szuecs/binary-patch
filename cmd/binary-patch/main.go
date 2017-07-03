@@ -28,14 +28,9 @@ var (
 	Githash string = "Not set"
 	// Version is used to store the tagged version of the build
 	Version string = "Not set"
+	// public key to verify signed updates
+	publicKey []byte
 )
-
-var publicKey = []byte(`
------BEGIN PUBLIC KEY-----
-MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEr+Ln7jAKxYskk9fNXNXAJrcEB0Am
-jf+4GRM//Kl6mhHAYq/j6cdWALJS8vJyb4OpvlCzAoiJOH70zss3h0L62w==
------END PUBLIC KEY-----
-`)
 
 type SignedUpdate struct {
 	Patch     []byte `json:"patch"`
@@ -45,22 +40,35 @@ type SignedUpdate struct {
 
 func main() {
 	var (
-		debug         = kingpin.Flag("debug", "enable debug mode").Default("false").Bool()
-		_             = kingpin.Command("version", "show version")
-		update        = kingpin.Command("update", "update binary")
-		baseUpdateURL = update.Flag("url", "Update URL").Default("http://localhost:8080/update").String()
-		patchUpdate   = kingpin.Command("patch-update", "update binary diff")
+		publicKeyFDptr **os.File
+		debug          = kingpin.Flag("debug", "enable debug mode").Default("false").Bool()
+		_              = kingpin.Command("version", "show version")
+		update         = kingpin.Command("update", "update binary")
+		baseUpdateURL  = update.Flag("url", "Update URL").Default("http://localhost:8080/update").String()
+		patchUpdate    = kingpin.Command("patch-update", "update binary diff")
 
-		basePatchUpdateURL       = patchUpdate.Flag("url", "Update URL").Default("http://localhost:8080/patch-update").String()
-		signedUpdate             = kingpin.Command("signed-update", "Verify signature and update binary")
-		baseSignedUpdateURL      = signedUpdate.Flag("url", "Update URL").Default("http://localhost:8080/signed-update").String()
-		signedPatchUpdate        = kingpin.Command("signed-patch-update", "Verify signature and update binary diff")
+		basePatchUpdateURL = patchUpdate.Flag("url", "Update URL").Default("http://localhost:8080/patch-update").String()
+
+		signed              = kingpin.Command("signed", "Signed updates")
+		signedUpdate        = signed.Command("update", "Verify signature and update binary")
+		baseSignedUpdateURL = signedUpdate.Flag("url", "Update URL").Default("http://localhost:8080/signed-update").String()
+
+		signedPatchUpdate        = signed.Command("patch-update", "Verify signature and update binary diff")
 		baseSignedPatchUpdateURL = signedPatchUpdate.Flag("url", "Update URL").Default("http://localhost:8080/signed-patch-update").String()
 	)
+	publicKeyFDptr = signed.Flag("public-key", "File path containing the public Key used to verify signed updates.").File()
 
 	cmd := kingpin.Parse()
 	if *debug {
 		log.Print("TODO configure debug mode")
+	}
+	if publicKeyFDptr != nil && *publicKeyFDptr != nil {
+		fd := *publicKeyFDptr
+		if buf, err := ioutil.ReadAll(fd); err == nil {
+			publicKey = buf
+		} else {
+			log.Fatalf("Failed to read %s: %v", fd.Name(), err)
+		}
 	}
 
 	switch cmd {
