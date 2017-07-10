@@ -10,13 +10,14 @@ GITURL		= $(shell git config --get remote.origin.url)
 GITSTATUS	= $(shell git status --porcelain || echo "no changes")
 SOURCES		= $(shell find . -name '*.go')
 GOPKGS		= $(shell go list ./... | grep -v /vendor/)
+SHELL		= bash
 
 default: build.local build.server
 
 clean:
-	test -d build && rm -rf build
-	test -d bindata && rm -rf bindata
-	test -d /tmp/bindata && rm -rf /tmp/bindata
+	test -d build && rm -rf build || true
+	test -d bindata && rm -rf bindata || true
+	test -d /tmp/bindata && rm -rf /tmp/bindata || true
 	mkdir build bindata
 
 test:

@@ -114,6 +114,7 @@ func (svc *Service) Run(config *ServiceConfig) error {
 		private.GET("/patch-update/:name", svc.PatchUpdateHandler)
 		private.GET("/signed-update/:name", svc.SignedUpdateHandler)
 		private.GET("/signed-patch-update/:name", svc.SignedPatchUpdateHandler)
+		private.PUT("/upload/:name", svc.UploadHandler)
 	} else {
 		// public routes
 		router.GET("/", svc.RootHandler)
@@ -121,6 +122,7 @@ func (svc *Service) Run(config *ServiceConfig) error {
 		router.GET("/patch-update/:name", svc.PatchUpdateHandler)
 		router.GET("/signed-update/:name", svc.SignedUpdateHandler)
 		router.GET("/signed-patch-update/:name", svc.SignedPatchUpdateHandler)
+		router.PUT("/upload/:name", svc.UploadHandler)
 	}
 
 	// TLS config

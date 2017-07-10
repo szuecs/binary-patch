@@ -3,6 +3,7 @@ package api
 import (
 	"bufio"
 	"bytes"
+	"crypto/sha256"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -295,9 +296,125 @@ func (svc *Service) SignedPatchUpdateHandler(ginCtx *gin.Context) {
 	glog.Infof("Copied %d bytes patch to client to patch %s", len(binPatch), newUpdate)
 }
 
+// UploadData represents all the data needed to provide update, patch
+// update, signed update or signed patch update. You need to sign your
+// data if you want to provide signed updates.
+type UploadData struct {
+	Data          []byte `json:"data"`                     // the new binary version
+	Version       string `json:"version"`                  // version string
+	Architecture  string `json:"arch"`                     // architecture, p.e. amd64
+	OS            string `json:"os"`                       // operating system, p.e. linux
+	Signature     []byte `json:"signature,omitempty"`      // DER encoded signature
+	SignatureType string `json:"signature-type,omitempty"` // ecdsa
+}
+
+func (ud *UploadData) Save(application string) error {
+	up := &Update{
+		Name:    application,
+		Version: ud.Version,
+		System: ArchAndOS{
+			Arch: ud.Architecture,
+			OS:   ud.OS,
+		},
+	}
+	filepath := up.GetFilepath()
+	_, err := os.Stat(filepath)
+	if err == nil {
+		glog.Errorf("Filepath %s already exists: %v", filepath, err)
+		return fmt.Errorf("%s already exists", filepath)
+	}
+	if !os.IsNotExist(err) {
+		glog.Errorf("Failed while doing stat(%s): %v", filepath, err)
+		return fmt.Errorf("Failed to save %s", filepath)
+	}
+
+	ud.Write(filepath, ud.Data)
+	// TODO make filepath executable
+
+	// TODO: signature length is fixed size
+	if len(ud.Signature) > 0 && validSignatureType(ud.SignatureType) {
+		// TODO check if this works as expected
+		err = ud.Write(filepath+".signature", ud.Signature)
+		if err != nil {
+			glog.Errorf("Failed to write %s.signature: %v", filepath, err)
+			return fmt.Errorf("Failed to save %s.signature", filepath)
+		}
+	}
+
+	// TODO check if this works as expected
+	hash := sha256.Sum256(ud.Data)
+	sum := fmt.Sprintf("%x", hash)
+	glog.Infof("Wrote sha256: %s", sum)
+	err = ud.Write(filepath+".sha256", []byte(sum))
+	if err != nil {
+		glog.Errorf("Failed to write %s.sha256: %v", filepath, err)
+		return fmt.Errorf("Failed to save %s.sha256", filepath)
+	}
+	return nil
+}
+
+func validSignatureType(s string) bool {
+	signatures := map[string]bool{
+		"ecdsa": true,
+	}
+	_, ok := signatures[s]
+	return ok
+}
+
+func (ud *UploadData) Write(filepath string, data []byte) error {
+	fd, err := os.OpenFile(filepath, os.O_WRONLY|os.O_CREATE, 0440)
+	if err != nil {
+		return err
+	}
+	defer fd.Close()
+
+	_, err = fd.Write(data)
+	return err
+}
+
+func returnUploadErr(msg string) gin.H {
+	return gin.H{
+		"error": msg,
+		"example": map[string]string{
+			"data":           "your-binary-data",
+			"version":        "v0.0.1",
+			"arch":           "amd64",
+			"os":             "linux",
+			"signature":      "Base64-encoded-DER-signature-of-the-binary-data",
+			"signature-type": "ecdsa"},
+	}
+}
+
+// UploadHandler handles /upload/:name endpoint
+func (svc *Service) UploadHandler(ginCtx *gin.Context) {
+	name := ginCtx.Param("name")
+
+	if ginCtx.ContentType() != "application/json" {
+		ginCtx.JSON(http.StatusUnprocessableEntity, returnUploadErr(fmt.Sprintf("Content-Type: application/json required for application '%s'", name)))
+		return
+	}
+
+	var upload UploadData
+	if err := ginCtx.BindJSON(&upload); err != nil {
+		ginCtx.JSON(http.StatusUnprocessableEntity, returnUploadErr(fmt.Sprintf("Failed to unmarshal json of application '%s': %v", name, err)))
+		return
+	}
+
+	if err := upload.Save(name); err != nil {
+		ginCtx.JSON(http.StatusUnprocessableEntity, returnUploadErr(fmt.Sprintf("Failed to save provided data for application '%s': %v", name, err)))
+		return
+	}
+
+	if len(upload.Signature) > 0 {
+		ginCtx.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("uploaded signed application '%s' version %s for OS %s and architecture %s", name, upload.Version, upload.OS, upload.Architecture)})
+	} else {
+		ginCtx.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("uploaded unsigned application '%s' version %s for OS %s and architecture %s", name, upload.Version, upload.OS, upload.Architecture)})
+	}
+}
+
 // RootHandler handles / endpoint
 func (svc *Service) RootHandler(ginCtx *gin.Context) {
-	ginCtx.JSON(http.StatusOK, gin.H{"title": "root"})
+	ginCtx.Redirect(http.StatusMovedPermanently, "/healthz")
 }
 
 // HealthHandler handles /healthz endpoint
