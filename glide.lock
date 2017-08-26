@@ -33,9 +33,9 @@ imports:
   version: fc9e8d8ef48496124e79ae0df75490096eccf6fe
 - name: github.com/pkg/errors
   version: 645ef00459ed84a119197bfb8d8205042c6df63d
-- name: github.com/zalando/gin-glog
+- name: github.com/szuecs/gin-glog
   version: 889447754c9341143a101ccc6449d91d0b9ba57a
-- name: github.com/zalando/gin-gomonitor
+- name: github.com/szuecs/gin-gomonitor
   version: d94396047ba93c8c9d38345f3e4820616670b491
   subpackages:
   - aspects

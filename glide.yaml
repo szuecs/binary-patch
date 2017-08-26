@@ -8,9 +8,9 @@ import:
 - package: github.com/kr/binarydist
 - package: github.com/pkg/errors
   version: ^0.8.0
-- package: github.com/zalando/gin-glog
+- package: github.com/szuecs/gin-glog
   version: ^1.1.0
-- package: github.com/zalando/gin-gomonitor
+- package: github.com/szuecs/gin-gomonitor
   version: ^1.1.1
   subpackages:
   - aspects
