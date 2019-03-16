@@ -11,6 +11,7 @@ GITSTATUS	= $(shell git status --porcelain || echo "no changes")
 SOURCES		= $(shell find . -name '*.go')
 GOPKGS		= $(shell go list ./... | grep -v /vendor/)
 SHELL		= bash
+GO111           ?= on
 
 default: build.local build.server
 
@@ -21,33 +22,33 @@ clean:
 	mkdir build bindata
 
 test:
-	go test -v $(GOPKGS)
+	GO111MODULE=$(GO111) go test -v $(GOPKGS)
 
 test.raceconditions:
-	go test -race $(GOPKGS)
+	GO111MODULE=$(GO111) go test -race $(GOPKGS)
 
 fmt:
-	go fmt $(GOPKGS)
+	GO111MODULE=$(GO111) go fmt $(GOPKGS)
 
 check:
 	golint $(GOPKGS)
-	go vet -v $(GOPKGS)
+	GO111MODULE=$(GO111) go vet -v $(GOPKGS)
 
 build.server:
-	go build -o build/binary-patch-server ./cmd/binary-patch-server
+	GO111MODULE=$(GO111) go build -o build/binary-patch-server ./cmd/binary-patch-server
 
 build.local: build/$(BINARY)
 build.linux: build/linux/$(BINARY)
 build.osx: build/osx/$(BINARY)
 
 build/$(BINARY): $(SOURCES)
-	CGO_ENABLED=0 go build -o build/$(BINARY) $(BUILD_FLAGS) -ldflags "$(LDFLAGS)" ./cmd/binary-patch
+	CGO_ENABLED=0 GO111MODULE=$(GO111) go build -o build/$(BINARY) $(BUILD_FLAGS) -ldflags "$(LDFLAGS)" ./cmd/binary-patch
 
 build/linux/$(BINARY): $(SOURCES)
-	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build $(BUILD_FLAGS) -o build/linux/$(BINARY) -ldflags "$(LDFLAGS)" ./cmd/binary-patch
+	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 GO111MODULE=$(GO111) go build $(BUILD_FLAGS) -o build/linux/$(BINARY) -ldflags "$(LDFLAGS)" ./cmd/binary-patch
 
 build/osx/$(BINARY): $(SOURCES)
-	GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build $(BUILD_FLAGS) -o build/osx/$(BINARY) -ldflags "$(LDFLAGS)" ./cmd/binary-patch
+	GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 GO111MODULE=$(GO111) go build $(BUILD_FLAGS) -o build/osx/$(BINARY) -ldflags "$(LDFLAGS)" ./cmd/binary-patch
 
 build.docker: build.linux
 	docker build --rm -t "$(IMAGE):$(TAG)" -f $(DOCKERFILE) .
@@ -58,4 +59,3 @@ build.push: build.docker
 build.test: clean build.server
 	test -d  /tmp/bindata ||  mkdir -p /tmp/bindata
 	testdata/create_testdata.sh
-
