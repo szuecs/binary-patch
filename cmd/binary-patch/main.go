@@ -9,16 +9,14 @@ import (
 
 	"github.com/szuecs/binary-patch/patchclient"
 
-	"gopkg.in/alecthomas/kingpin.v2"
+	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
 
 var (
-	//Buildstamp is used for storing the timestamp of the build
-	Buildstamp string = "Not set"
-	//Githash is used for storing the commit hash of the build
-	Githash string = "Not set"
-	// Version is used to store the tagged version of the build
-	Version string = "Not set"
+	version string = ""
+	commit  string = ""
+	date    string = ""
+
 	// public key to verify signed updates
 	publicKey []byte
 )
@@ -62,31 +60,31 @@ func main() {
 ================================
     Buildtime: %s
     GitHash: %s
-`, path.Base(os.Args[0]), Version, Buildstamp, Githash)
+`, path.Base(os.Args[0]), version, date, commit)
 		os.Exit(0)
 	case update.FullCommand():
-		pc := patchclient.NewInsecurePatchClient(*baseUpdateURL, Version)
+		pc := patchclient.NewInsecurePatchClient(*baseUpdateURL, version)
 		err := pc.UnsignedNotVerifiedUpdate()
 		if err != nil {
 			log.Fatalf("Failed to update: %v", err)
 		}
 
 	case patchUpdate.FullCommand():
-		pc := patchclient.NewInsecurePatchClient(*basePatchUpdateURL, Version)
+		pc := patchclient.NewInsecurePatchClient(*basePatchUpdateURL, version)
 		err := pc.UnsignedNotVerifiedPatchUpdate()
 		if err != nil {
 			log.Fatalf("Failed to update: %v", err)
 		}
 
 	case signedUpdate.FullCommand():
-		pc := patchclient.NewPatchClient(*baseSignedUpdateURL, Version, publicKey)
+		pc := patchclient.NewPatchClient(*baseSignedUpdateURL, version, publicKey)
 		err := pc.SignedVerifiedUpdate()
 		if err != nil {
 			log.Fatalf("Failed to update: %v", err)
 		}
 
 	case signedPatchUpdate.FullCommand():
-		pc := patchclient.NewPatchClient(*baseSignedPatchUpdateURL, Version, publicKey)
+		pc := patchclient.NewPatchClient(*baseSignedPatchUpdateURL, version, publicKey)
 		err := pc.SignedVerifiedPatchUpdate()
 		if err != nil {
 			log.Fatalf("Failed to update: %v", err)

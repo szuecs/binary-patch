@@ -1,0 +1,56 @@
+---
+project_name: binary-patch
+
+release:
+  github:
+    owner: szuecs
+    name: binary-patch
+
+builds:
+  - main : ./cmd/binary-patch/
+    binary: binary-patch
+    goos:
+      - darwin
+      - linux
+      - windows
+    goarch:
+      - amd64
+    env:
+      - CGO_ENABLED=0
+      - GO111MODULE=on
+      - VERSION=$(git describe --tags --always --dirty)
+    #ldflags: -X main.version={{ .Version }} # works
+    #ldflags: -X main.version={{ .Env.VERSION }}
+    #ldflags: -X main.version=$(VERSION) -X main.date=$(shell date -u '+%Y-%m-%d_%I:%M%p') -X main.commit=$(shell git rev-parse HEAD)
+
+  - main : ./cmd/binary-patch-server/
+    binary: binary-patch-server
+    goos:
+      - darwin
+      - linux
+      - windows
+    goarch:
+      - amd64
+    #ldflags: -X main.version=$(VERSION) -X main.date=$(shell date -u '+%Y-%m-%d_%I:%M%p') -X main.commit=$(shell git rev-parse HEAD)
+    env:
+      - CGO_ENABLED=0
+      - GO111MODULE=on
+      - VERSION=$(git describe --tags --always --dirty)
+
+archive:
+  files:
+    - README.md
+    - LICENSE
+
+checksum:
+  name_template: 'checksums.txt'
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+    - '^doc'
+    - '^test'
+
+sign:
+   artifacts: checksum

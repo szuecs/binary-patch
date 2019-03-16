@@ -4,7 +4,7 @@ IMAGE		?= pierone.stups.zalan.do/teapot/$(BINARY)
 TAG		?= $(VERSION)
 DOCKERFILE	?= Dockerfile
 BUILD_FLAGS	?= -v
-LDFLAGS		?= -X main.Version=$(VERSION) -X main.Buildstamp=$(shell date -u '+%Y-%m-%d_%I:%M:%S%p') -X main.Githash=$(shell git rev-parse HEAD)
+LDFLAGS		?= -X main.version=$(VERSION) -X main.date=$(shell date -u '+%Y-%m-%d_%I:%M%p') -X main.commit=$(shell git rev-parse HEAD)
 GITHEAD		= $(shell git rev-parse --short HEAD)
 GITURL		= $(shell git config --get remote.origin.url)
 GITSTATUS	= $(shell git status --porcelain || echo "no changes")
@@ -35,7 +35,7 @@ check:
 	GO111MODULE=$(GO111) go vet -v $(GOPKGS)
 
 build.server:
-	GO111MODULE=$(GO111) go build -o build/binary-patch-server ./cmd/binary-patch-server
+	GO111MODULE=$(GO111) go build -o build/binary-patch-server $(BUILD_FLAGS) -ldflags "$(LDFLAGS)" ./cmd/binary-patch-server
 
 build.local: build/$(BINARY)
 build.linux: build/linux/$(BINARY)

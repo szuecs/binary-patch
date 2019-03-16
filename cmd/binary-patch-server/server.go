@@ -12,19 +12,14 @@ import (
 	"golang.org/x/oauth2"
 )
 
-// Buildstamp is used to store the timestamp of the build
-var Buildstamp = "Not set"
+var (
+	version string = ""
+	commit  string = ""
+	date    string = ""
 
-// Githash is used to store the commit hash of the build
-var Githash = "Not set"
-
-// Version is used to store the tagged version of the build
-var Version = "Not set"
-
-// flag variables
-var version bool
-
-var serverConfig *conf.Config
+	versionflag  bool
+	serverConfig *conf.Config
+)
 
 func init() {
 	bin := path.Base(os.Args[0])
@@ -45,7 +40,7 @@ Example:
 		os.Exit(2)
 	}
 
-	flag.BoolVar(&version, "version", false, "Print version and exit")
+	flag.BoolVar(&versionflag, "version", false, "Print version and exit")
 	flag.BoolVar(&serverConfig.DebugEnabled, "debug", serverConfig.DebugEnabled, "Enable debug output")
 	flag.BoolVar(&serverConfig.Oauth2Enabled, "oauth", serverConfig.Oauth2Enabled, "Enable OAuth2")
 	flag.BoolVar(&serverConfig.ProfilingEnabled, "profile", serverConfig.ProfilingEnabled, "Enable profiling.")
@@ -61,12 +56,12 @@ Example:
 }
 
 func main() {
-	if version {
+	if versionflag {
 		fmt.Printf(`%s Version: %s
 ================================
     Buildtime: %s
     GitHash: %s
-`, path.Base(os.Args[0]), Version, Buildstamp, Githash)
+`, path.Base(os.Args[0]), version, date, commit)
 		os.Exit(0)
 	}
 
