@@ -8,7 +8,7 @@ import (
 	"os"
 	"time"
 
-	"gopkg.in/yaml.v1"
+	"gopkg.in/yaml.v3"
 
 	"github.com/golang/glog"
 	"github.com/zalando/gin-oauth2/zalando"

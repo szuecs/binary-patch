@@ -18,5 +18,5 @@ require (
 	golang.org/x/oauth2 v0.0.0-20190226205417-e64efc72b421
 	gopkg.in/alecthomas/kingpin.v2 v2.2.6
 	gopkg.in/mcuadros/go-monitor.v1 v1.1.1
-	gopkg.in/yaml.v1 v1.0.0-20140924161607-9f9df34309c0
+	gopkg.in/yaml.v3 v3.0.1
 )
