@@ -68,6 +68,10 @@ func main() {
 	httpOnly := IsHTTPOnly(serverConfig)
 	var cfg *api.ServiceConfig
 	cfg, err := GetServiceConfig(serverConfig, httpOnly)
+	if err != nil {
+		fmt.Printf("ERR: Could not get service config, caused by: %s\n", err)
+		os.Exit(1)
+	}
 
 	svc := api.NewService()
 	err = svc.Run(cfg)
@@ -99,7 +103,6 @@ func GetServiceConfig(cfg *conf.Config, httpOnly bool) (*api.ServiceConfig, erro
 		keypair, err = tls.LoadX509KeyPair(cfg.TLSCertfilePath, cfg.TLSKeyfilePath)
 		if err != nil {
 			return nil, fmt.Errorf("ERR: Could not load X509 KeyPair, caused by: %s\n", err)
-
 		}
 	}
 
